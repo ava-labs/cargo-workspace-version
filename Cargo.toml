@@ -11,7 +11,7 @@ authors = [
 ]
 
 [dependencies]
-anyhow = "1.0.71"
+anyhow = "1.0.72"
 clap = { version = "4.3.11", features = ["derive"] }
 toml = "0.7.6"
 toml_edit = "0.19.12"
