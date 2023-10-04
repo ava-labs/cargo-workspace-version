@@ -14,4 +14,4 @@ authors = [
 anyhow = "1.0.75"
 clap = { version = "4.4.6", features = ["derive"] }
 toml = "0.8.1"
-toml_edit = "0.19.14"
+toml_edit = "0.20.1"
