@@ -252,7 +252,17 @@ fn check_version<S: AsRef<str>>(v: &mut Value, source: S, opts: &Args) -> bool {
     false
 }
 
-/// Returns true if the workspace table has a `workspace = true` entry
+/// Returns true if the provided table has a `workspace = true` entry
+///
+/// # Arguments
+/// * `tbl` - a table retrieved from a TOML document. For example,
+///
+///    ```toml
+///    [package]
+///    version.workspace = true
+///    ```
+///
+///   `tbl` would be the value of `package.version` in this case.
 fn is_workspace_true(tbl: &toml_edit::Table) -> bool {
     if let Some(Item::Value(Value::Boolean(v))) = tbl.get("workspace") {
         *v.value()
