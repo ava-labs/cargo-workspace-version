@@ -263,6 +263,7 @@ fn check_version<S: AsRef<str>>(v: &mut Value, source: S, opts: &Args) -> bool {
     false
 }
 
+/// Returns true if the workspace table has a `workspace = true` entry
 fn is_workspace_true(tbl: &toml_edit::Table) -> bool {
     if let Some(Item::Value(Value::Boolean(v))) = tbl.get("workspace") {
         *v.value()
