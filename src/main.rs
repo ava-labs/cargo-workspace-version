@@ -63,17 +63,6 @@ impl Args {
         document: &Document,
     ) -> anyhow::Result<()> {
         let path = path.as_ref();
-        if !self.quiet {
-            println!(
-                "{} {}",
-                path.display(),
-                if self.write() {
-                    "was updated"
-                } else {
-                    "has the wrong version"
-                }
-            );
-        }
         if self.write() {
             if !self.quiet {
                 println!("{} was updated", path.display());
