@@ -2,7 +2,11 @@
 #![warn(missing_docs, missing_debug_implementations, rust_2018_idioms)]
 //! Release tool to update all versions of everything
 //! inside the crate at the same time to the same version
-use std::{collections::HashSet, fs, path::PathBuf};
+use std::{
+    collections::HashSet,
+    fs,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{anyhow, bail, Context, Error};
 use clap::{Parser, Subcommand};
@@ -53,6 +57,34 @@ impl Args {
     fn check(&self) -> bool {
         matches!(self.cmd, SubCommand::Check { newver: _ })
     }
+    fn maybe_write(
+        &self,
+        path: &(impl AsRef<Path> + ?Sized),
+        document: &Document,
+    ) -> anyhow::Result<()> {
+        let path = path.as_ref();
+        if !self.quiet {
+            println!(
+                "{} {}",
+                path.display(),
+                if self.write() {
+                    "was updated"
+                } else {
+                    "has the wrong version"
+                }
+            );
+        }
+        if self.write() {
+            if !self.quiet {
+                println!("{} was updated", path.display());
+            }
+            fs::write(path, document.to_string())?;
+        } else if !self.quiet {
+            println!("{} needs to be updated", path.display());
+        }
+
+        Ok(())
+    }
 }
 
 fn main() -> Result<(), Error> {
@@ -60,11 +92,31 @@ fn main() -> Result<(), Error> {
 
     // first read the top level Cargo.cli
     let base = std::fs::read_to_string("Cargo.toml")?;
-    let doc = base.parse::<Document>()?;
+    let mut doc = base.parse::<Document>()?;
     // get the [workspace] section
     let workspace = doc
-        .get("workspace")
+        .get_mut("workspace")
         .ok_or(anyhow!("No [workspace] section in top level"))?;
+
+    let mut root_updated = false;
+    let mut found_workspace_version = false;
+    if let Some(packages) = workspace.get_mut("package") {
+        // The workspace root declares a `packages` section. The packages we find
+        // within the workspace are likely to have `package.version.workspace = true`
+        // which means they inherit the version from the workspace root.
+
+        match packages.get_mut("version") {
+            None => {
+                // do nothing. this just means the workspace root does not declare a version
+            }
+            Some(Item::Value(v)) => {
+                found_workspace_version = true;
+                root_updated = check_version(v, "Cargo.toml", &cli);
+            }
+            Some(_) => bail!("version in [workspace.package] wasn't a string"),
+        }
+    }
+
     // find the members array inside the workspace
     let members = workspace
         .get("members")
@@ -80,7 +132,7 @@ fn main() -> Result<(), Error> {
         .map(|v| v.as_str().expect("member wasn't a string").to_string())
         .collect::<HashSet<String>>();
 
-    let mut some_difference_found = false;
+    let mut some_difference_found = root_updated;
 
     // work on each subdirectory (each member of the workspace)
     for member in members {
@@ -112,6 +164,9 @@ fn main() -> Result<(), Error> {
             Some(Item::Value(v)) => {
                 changed |= check_version(v, inner_path.display().to_string(), &cli);
             }
+            Some(Item::Table(tbl)) if is_workspace_true(tbl) && found_workspace_version => {
+                // do nothing; we already found the version in the workspace root
+            }
             Some(_) => bail!(format!(
                 "version in {} wasn't a string",
                 inner_path.display()
@@ -142,28 +197,17 @@ fn main() -> Result<(), Error> {
             };
         }
         if changed {
-            if !cli.quiet {
-                println!(
-                    "{} {}",
-                    inner_path.display(),
-                    if cli.write() {
-                        "was updated"
-                    } else {
-                        "has the wrong version"
-                    }
-                );
-            }
-            if cli.write() {
-                if !cli.quiet {
-                    println!("{} was updated", inner_path.display());
-                }
-                fs::write(inner_path, inner.to_string())?;
-            } else if !cli.quiet {
-                println!("{} needs to be updated", inner_path.display());
-            }
+            cli.maybe_write(&inner_path, &inner)?;
         }
         some_difference_found |= changed;
     }
+
+    // Write the root Cargo.toml if we made any changes but only after we no longer
+    // reference `workspace` or `members` which hold a reference to the document
+    if root_updated {
+        cli.maybe_write("Cargo.toml", &doc)?;
+    }
+
     if cli.check() && some_difference_found {
         bail!("There were differences")
     }
@@ -217,4 +261,12 @@ fn check_version<S: AsRef<str>>(v: &mut Value, source: S, opts: &Args) -> bool {
         }
     }
     false
+}
+
+fn is_workspace_true(tbl: &toml_edit::Table) -> bool {
+    if let Some(Item::Value(Value::Boolean(v))) = tbl.get("workspace") {
+        *v.value()
+    } else {
+        false
+    }
 }
