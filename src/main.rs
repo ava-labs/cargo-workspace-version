@@ -10,7 +10,7 @@ use std::{
 
 use anyhow::{anyhow, bail, Context, Error};
 use clap::{Parser, Subcommand};
-use toml_edit::{Document, Formatted, InlineTable, Item, KeyMut, Value};
+use toml_edit::{DocumentMut, Formatted, InlineTable, Item, KeyMut, Value};
 
 #[derive(Debug, Subcommand)]
 enum SubCommand {
@@ -60,7 +60,7 @@ impl Args {
     fn maybe_write(
         &self,
         path: &(impl AsRef<Path> + ?Sized),
-        document: &Document,
+        document: &DocumentMut,
     ) -> anyhow::Result<()> {
         let path = path.as_ref();
         if self.write() {
@@ -81,7 +81,7 @@ fn main() -> Result<(), Error> {
 
     // first read the top level Cargo.cli
     let base = std::fs::read_to_string("Cargo.toml")?;
-    let mut doc = base.parse::<Document>()?;
+    let mut doc = base.parse::<DocumentMut>()?;
     // get the [workspace] section
     let workspace = doc
         .get_mut("workspace")
@@ -130,7 +130,7 @@ fn main() -> Result<(), Error> {
         // and load into a parsed yaml document
         let inner = std::fs::read_to_string(&inner_path)
             .context(format!("Can't read {}", inner_path.display()))?;
-        let mut inner = inner.parse::<Document>()?;
+        let mut inner = inner.parse::<DocumentMut>()?;
 
         // now find the [package] section
         let package = inner.get_mut("package").ok_or(anyhow!(format!(
